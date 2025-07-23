@@ -7,7 +7,7 @@ import { ThemeProvider } from '@/components/providers/ThemeProvider';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'TraversyPress',
+  title: 'Vendor Admin',
   description: 'Admin dashboard',
 };
 
