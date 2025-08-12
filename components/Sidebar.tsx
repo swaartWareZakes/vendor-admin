@@ -52,11 +52,11 @@ const Sidebar = () => {
             <span>Billing</span>
             <CommandShortcut>⌘B</CommandShortcut>
           </CommandItem>
-          <CommandItem>
+          {/* <CommandItem>
             <Settings className='mr-2 h-4 w-4' />
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
-          </CommandItem>
+          </CommandItem> */}
         </CommandGroup>
       </CommandList>
     </Command>
