@@ -10,10 +10,11 @@ import {
   TableCaption,
 } from '@/components/ui/table';
 import Link from 'next/link';
-import { Vendor } from '@/app/(main)/vendors/page';
+import { Vendor } from '@/types/vendors';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
+
 
 interface VendorsTableProps {
   vendors: Vendor[];
@@ -21,27 +22,24 @@ interface VendorsTableProps {
 }
 
 const VendorsTable = ({ vendors, onDeleteSuccess }: VendorsTableProps) => {
-    const handleDelete = async (vendorId: string) => {
-      const confirmDelete = confirm('Are you sure you want to delete this vendor?');
-      if (!confirmDelete) return;
-    
-      const { error, data } = await supabase.from('vendors').delete().eq('id', vendorId);
-    
-      console.log("Delete result", { error, data }); // 👈 Add this
-    
-      if (error) {
-        toast({
-          title: '❌ Failed to delete vendor',
-          description: error.message,
-        });
-      } else {
-        toast({ title: '✅ Vendor deleted successfully' });
-        console.log('Deleting vendor with ID:', vendorId);
+  const handleDelete = async (vendorId: string) => {
+    const confirmDelete = confirm(
+      'Are you sure you want to delete this vendor?'
+    );
+    if (!confirmDelete) return;
 
-        onDeleteSuccess();
-      }
-    };
-  
+    const { error } = await supabase.from('vendors').delete().eq('id', vendorId);
+
+    if (error) {
+      toast({
+        title: '❌ Failed to delete vendor',
+        description: error.message,
+      });
+    } else {
+      toast({ title: '✅ Vendor deleted successfully' });
+      onDeleteSuccess();
+    }
+  };
 
   return (
     <div className='mt-10'>
@@ -50,34 +48,53 @@ const VendorsTable = ({ vendors, onDeleteSuccess }: VendorsTableProps) => {
         <TableCaption>A list of registered vendors</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>Image</TableHead>
+            <TableHead>Images</TableHead>
             <TableHead>Title</TableHead>
             <TableHead className='hidden md:table-cell'>Category</TableHead>
             <TableHead className='hidden md:table-cell'>Price</TableHead>
-            <TableHead className='hidden md:table-cell text-right'>Rating</TableHead>
+            <TableHead className='hidden md:table-cell text-right'>
+              Rating
+            </TableHead>
             <TableHead className='text-right'>Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {vendors.map((vendor) => (
             <TableRow key={vendor.id}>
+              {/* ✅ MODIFIED: This cell now displays both images */}
               <TableCell>
-                {vendor.image_url ? (
-                  <img
-                    src={vendor.image_url}
-                    alt={vendor.title}
-                    className='w-14 h-14 object-cover rounded'
-                  />
-                ) : (
-                  <span className='text-sm italic text-gray-500'>No image</span>
-                )}
+                <div className='flex items-center'>
+                  {vendor.image_url_food || vendor.image_url_outside ? (
+                    <>
+                      {vendor.image_url_food && (
+                        <img
+                          src={vendor.image_url_food}
+                          alt={`${vendor.title} food`}
+                          className='w-12 h-12 object-cover rounded-full border-2 border-white'
+                        />
+                      )}
+                      {vendor.image_url_outside && (
+                        <img
+                          src={vendor.image_url_outside}
+                          alt={`${vendor.title} outside`}
+                          // Negative margin creates the overlap effect
+                          className='w-12 h-12 object-cover rounded-full border-2 border-white -ml-4'
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <span className='text-sm italic text-gray-500'>
+                      No images
+                    </span>
+                  )}
+                </div>
               </TableCell>
               <TableCell>{vendor.title}</TableCell>
               <TableCell className='hidden md:table-cell'>
                 <div className='flex flex-wrap gap-1'>
                   {(Array.isArray(vendor.category)
                     ? vendor.category
-                    : vendor.category.split(',').map((cat: string) => cat.trim())
+                    : (vendor.category || '').split(',').map((cat: string) => cat.trim())
                   ).map((cat: string) => (
                     <span
                       key={cat}
@@ -96,7 +113,9 @@ const VendorsTable = ({ vendors, onDeleteSuccess }: VendorsTableProps) => {
               </TableCell>
               <TableCell className='flex gap-2 justify-end'>
                 <Link href={`/vendors/edit/${vendor.id}`}>
-                  <Button size='sm' className='text-xs'>Edit</Button>
+                  <Button size='sm' className='text-xs'>
+                    Edit
+                  </Button>
                 </Link>
                 <Button
                   variant='destructive'

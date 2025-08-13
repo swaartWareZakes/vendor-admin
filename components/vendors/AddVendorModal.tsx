@@ -33,7 +33,8 @@ const formSchema = z.object({
   tags: z.string().optional(),
   location: z.string().optional(),
   price_range: z.string().optional(),
-  image: z.any().optional(),
+  image_food: z.any().optional(),
+  image_outside: z.any().optional(),
 });
 
 export default function AddVendorModal({
@@ -66,13 +67,14 @@ export default function AddVendorModal({
       tags: '',
       location: '',
       price_range: '',
-      image: undefined,
+      image_food: undefined,
+      image_outside: undefined,
     },
   });
 
   useEffect(() => {
     const loader = new Loader({
-      apiKey: process.env.NEXT_PUBLIC_Maps_API_KEY as string,
+      apiKey: process.env.NEXT_PUBLIC_Maps_API_KEY as string, 
       version: 'weekly',
       libraries: ['places'],
     });
@@ -90,18 +92,25 @@ export default function AddVendorModal({
     });
   }, []);
 
+  const uploadImage = async (file: File) => {
+    const fileName = `${Date.now()}-${file.name}`;
+    const { data, error } = await supabase.storage.from('intloko').upload(fileName, file, {
+      contentType: file.type,
+      upsert: true,
+    });
+    if (error) throw error;
+    const { data: publicUrlData } = supabase.storage.from('intloko').getPublicUrl(data.path);
+    return publicUrlData?.publicUrl || null;
+  };
+
   const fetchSuggestions = useCallback(
     debounce((query: string) => {
       if (!autocompleteService.current || query.length < 3) {
         setSuggestions([]);
         return;
       }
-
       autocompleteService.current.getPlacePredictions(
-        {
-          input: query,
-          componentRestrictions: { country: 'za' },
-        },
+        { input: query, componentRestrictions: { country: 'za' } },
         (predictions, status) => {
           if (status === google.maps.places.PlacesServiceStatus.OK && predictions) {
             setSuggestions(predictions);
@@ -117,14 +126,10 @@ export default function AddVendorModal({
 
   const handleSuggestionClick = (placeId: string) => {
     if (!geocoder.current) return;
-
     geocoder.current.geocode({ placeId: placeId }, (results, status) => {
       if (status === google.maps.GeocoderStatus.OK && results && results[0]) {
         const geo = results[0].geometry.location;
-        const lon = geo.lng();
-        const lat = geo.lat();
-
-        setLocation({ type: 'Point', coordinates: [lon, lat] });
+        setLocation({ type: 'Point', coordinates: [geo.lng(), geo.lat()] });
         form.setValue('location', results[0].formatted_address);
         setResolvedAddress(results[0].formatted_address);
         setShowSuggestions(false);
@@ -139,29 +144,18 @@ export default function AddVendorModal({
     });
   };
 
-  const uploadImage = async (file: File) => {
-    const fileName = `${Date.now()}-${file.name}`;
-    const { data, error } = await supabase.storage.from('intloko').upload(fileName, file, {
-      contentType: file.type,
-      upsert: true,
-    });
-    if (error) throw error;
-    const { data: publicUrlData } = supabase.storage.from('intloko').getPublicUrl(data.path);
-    return publicUrlData?.publicUrl || null;
-  };
-
   const handleUseCurrentLocation = async () => {
     navigator.geolocation.getCurrentPosition(async (pos) => {
       const coords: [number, number] = [pos.coords.longitude, pos.coords.latitude];
       if (!geocoder.current) {
-         toast({ title: '❌ Geocoder not ready', description: 'Please wait a moment and try again.' });
-         return;
+        toast({ title: '❌ Geocoder not ready', description: 'Please wait a moment and try again.' });
+        return;
       }
       geocoder.current.geocode({ location: { lat: pos.coords.latitude, lng: pos.coords.longitude } }, (results, status) => {
         if (status === 'OK' && results && results[0]) {
-            setLocation({ type: 'Point', coordinates: coords });
-            setResolvedAddress(results[0].formatted_address);
-            form.setValue('location', results[0].formatted_address);
+          setLocation({ type: 'Point', coordinates: coords });
+          setResolvedAddress(results[0].formatted_address);
+          form.setValue('location', results[0].formatted_address);
         }
       });
     });
@@ -170,18 +164,28 @@ export default function AddVendorModal({
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     try {
       setLoading(true);
-      let imageUrl = null;
 
-      if (values.image && values.image.length > 0) {
-        imageUrl = await uploadImage(values.image[0]);
-      }
+      // ✅ MODIFIED: Upload images in parallel and get their individual URLs
+      const foodUploadPromise = values.image_food?.[0]
+        ? uploadImage(values.image_food[0])
+        : Promise.resolve(null);
+      
+      const outsideUploadPromise = values.image_outside?.[0]
+        ? uploadImage(values.image_outside[0])
+        : Promise.resolve(null);
+
+      const [foodUrl, outsideUrl] = await Promise.all([
+        foodUploadPromise,
+        outsideUploadPromise,
+      ]);
 
       if (!location) {
-        toast({ title: '❌ Location missing', description: 'Please select a valid location.'});
+        toast({ title: '❌ Location missing', description: 'Please select a valid location.' });
         setLoading(false);
         return;
       }
 
+      // ✅ MODIFIED: Create the vendor object with the new separate image URL columns
       const vendor = {
         title: values.title,
         category: values.category,
@@ -189,7 +193,8 @@ export default function AddVendorModal({
         tags: values.tags?.split(',').map((t) => t.trim()),
         location: `SRID=4326;POINT(${location.coordinates[0]} ${location.coordinates[1]})`,
         price_range: values.price_range,
-        image_url: imageUrl,
+        image_url_food: foodUrl,
+        image_url_outside: outsideUrl,
       };
 
       const { error } = await supabase.from('vendors').insert(vendor);
@@ -231,7 +236,21 @@ export default function AddVendorModal({
             <FormField name='rating' control={form.control} render={({ field }) => ( <FormItem><FormLabel>Rating</FormLabel><FormControl><Input type='number' min={0} max={5} step='0.1' {...field} /></FormControl><FormMessage /></FormItem>)} />
             <FormField name='tags' control={form.control} render={({ field }) => ( <FormItem><FormLabel>Tags (comma-separated)</FormLabel><FormControl><Input placeholder='e.g. special chillies, homemade' {...field} /></FormControl></FormItem>)} />
             <FormField name='price_range' control={form.control} render={({ field }) => ( <FormItem><FormLabel>Price Range</FormLabel><FormControl><Input placeholder='e.g. R50 - R120' {...field} /></FormControl></FormItem>)} />
-            <FormField name='image' control={form.control} render={({ field }) => ( <FormItem><FormLabel>Image</FormLabel><FormControl><Input type='file' accept='image/*' onChange={(e) => field.onChange(e.target.files)}/></FormControl></FormItem>)} />
+            
+            <FormField name='image_food' control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Food Image</FormLabel>
+                <FormControl><Input type='file' accept='image/*' onChange={(e) => field.onChange(e.target.files)}/></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
+            <FormField name='image_outside' control={form.control} render={({ field }) => (
+              <FormItem>
+                <FormLabel>Outside Image (of the location)</FormLabel>
+                <FormControl><Input type='file' accept='image/*' onChange={(e) => field.onChange(e.target.files)}/></FormControl>
+                <FormMessage />
+              </FormItem>
+            )} />
 
             <FormItem>
               <FormLabel>Location</FormLabel>
@@ -276,7 +295,6 @@ export default function AddVendorModal({
                 )}
               />
             )}
-
             <Button type='submit' disabled={loading} className='w-full'>
               {loading ? 'Saving...' : 'Save Vendor'}
             </Button>
