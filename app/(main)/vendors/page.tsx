@@ -8,20 +8,9 @@ import BackButton from '@/components/BackButton';
 import AddVendorModal from '@/components/vendors/AddVendorModal';
 import VendorsTable from '@/components/vendors/VendorsTable';
 import VendorsPagination from '@/components/vendors/VendorsPagination';
+import { Vendor } from '@/types/vendors'; // ✅ CORRECTED: Import the correct, centralized type
 
-export interface Vendor {
-  id: string;
-  title: string;
-  category: string;
-  rating: number;
-  tags: string[];
-  location: string;
-  price_range: string;
-  visitors: number;
-  image_url: string;
-  inserted_at: string;
-  user_id: string;
-}
+// ❌ REMOVED: The old, outdated interface that was here is now gone.
 
 const VendorsPage = () => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -72,7 +61,7 @@ const VendorsPage = () => {
             <p className='text-gray-500'>No vendors to show.</p>
           ) : (
             <>
-              <VendorsTable vendors={vendors} onDeleteSuccess={fetchVendors}  />
+              <VendorsTable vendors={vendors} onDeleteSuccess={fetchVendors} />
               <VendorsPagination />
             </>
           )}
