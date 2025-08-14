@@ -3,73 +3,90 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Vendor } from '@/types/vendors';
+import { Profile } from '@/types/profiles';
 import DashboardCard from '@/components/dashboard/DashboardCard';
-import { Folder, MapPin, Star, Store } from 'lucide-react';
+import { Folder, Star, Store, Users } from 'lucide-react';
+import AnalyticsChart from '@/components/dashboard/AnalyticsChart';
+import RecentVendors from '@/components/dashboard/RecentVendors';
 
 export default function Home() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchVendors = async () => {
-      const { data, error } = await supabase.from('vendors').select('*');
-      if (error) {
-        console.error('❌ Supabase fetch error:', error);
+    const fetchData = async () => {
+      setLoading(true);
+      const [vendorsResponse, profilesResponse] = await Promise.all([
+        supabase
+          .from('vendors')
+          .select('*')
+          .order('inserted_at', { ascending: false }),
+        supabase.from('profiles').select('*'),
+      ]);
+
+      if (vendorsResponse.error) {
+        console.error('❌ Supabase vendors fetch error:', vendorsResponse.error);
       } else {
-        setVendors(data as Vendor[]);
+        setVendors(vendorsResponse.data as Vendor[]);
       }
+
+      if (profilesResponse.error) {
+        console.error('❌ Supabase profiles fetch error:', profilesResponse.error);
+      } else {
+        setProfiles(profilesResponse.data as Profile[]);
+      }
+      setLoading(false);
     };
 
-    fetchVendors();
+    fetchData();
   }, []);
 
+  const averageRating =
+    vendors.length > 0
+      ? parseFloat(
+          (
+            vendors.reduce((sum, v) => sum + (v.rating || 0), 0) /
+            vendors.length
+          ).toFixed(1)
+        )
+      : 0;
+
+  if (loading) {
+    return <div>Loading dashboard...</div>;
+  }
+
   return (
-    <div>
-      <div className='flex flex-col md:flex-row justify-between gap-5 mb-5'>
+    <>
+      {/* Top Row Cards */}
+      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-5'>
         <DashboardCard
-          title='Vendors'
+          title='Total Vendors'
           count={vendors.length}
-          icon={<Store className='text-slate-500' size={72} />}
+          icon={<Store className='text-primary' size={28} />}
+        />
+        <DashboardCard
+          title='Total Users'
+          count={profiles.length}
+          icon={<Users className='text-primary' size={28} />}
+        />
+        <DashboardCard
+          title='Average Rating'
+          count={averageRating}
+          icon={<Star className='text-primary' size={28} />}
         />
         <DashboardCard
           title='Categories'
           count={new Set(vendors.map((v) => v.category)).size}
-          icon={<Folder className='text-slate-500' size={72} />}
-        />
-        <DashboardCard
-          title='Avg Rating'
-          count={
-            vendors.length
-              ? Number(
-                  (
-                    vendors.reduce((sum, v) => sum + (v.rating || 0), 0) /
-                    vendors.length
-                  ).toFixed(1)
-                )
-              : 0
-          }
-          icon={<Star className='text-slate-500' size={72} />}
-        />
-        <DashboardCard
-          title='Tagged'
-          count={vendors.filter((v) => v.tags?.length).length}
-          icon={<MapPin className='text-slate-500' size={72} />}
+          icon={<Folder className='text-primary' size={28} />}
         />
       </div>
 
-      <h2 className='text-xl font-bold mb-2'>Vendors Preview</h2>
-      <ul className='space-y-2'>
-        {vendors.map((vendor) => (
-          <li
-            key={vendor.id}
-            className='border rounded p-4 bg-white dark:bg-slate-800'
-          >
-            <div className='font-bold'>{vendor.title}</div>
-            <div className='text-sm text-gray-500'>
-              Category: {vendor.category} • Rating: {vendor.rating}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
+      {/* Main Content Area: Now a single column with space between items */}
+      <div className='space-y-5'>
+        <AnalyticsChart vendors={vendors} profiles={profiles} />
+        <RecentVendors vendors={vendors} />
+      </div>
+    </>
   );
 }
